@@ -1,5 +1,5 @@
 CFLAGS  += -std=c99 -Wall -O2 -D_REENTRANT
-LIBS    := -lm -lssl -lcrypto -lpthread
+LIBS    := -lm -lpthread
 
 TARGET  := $(shell uname -s | tr '[A-Z]' '[a-z]' 2>/dev/null || echo unknown)
 
@@ -40,9 +40,15 @@ endif
 
 ifneq ($(WITH_OPENSSL),)
 	CFLAGS  += -I$(WITH_OPENSSL)/include
-	LDFLAGS += -L$(WITH_OPENSSL)/lib64 -L$(WITH_OPENSSL)/lib
+	ifneq ($(OPENSSL_STATIC_LIBS),)
+		LIBS += $(OPENSSL_STATIC_LIBS)
+	else
+		LDFLAGS += -L$(WITH_OPENSSL)/lib64 -L$(WITH_OPENSSL)/lib
+		LIBS    += -lssl -lcrypto
+	endif
 else
 	DEPS += $(ODIR)/lib/libssl.a
+	LIBS += $(ODIR)/lib/libssl.a $(ODIR)/lib/libcrypto.a
 endif
 
 all: $(BIN)

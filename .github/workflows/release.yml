@@ -1,0 +1,63 @@
+name: release
+
+on:
+  workflow_dispatch:
+    tags:
+      - '*'
+
+jobs:
+  new_release:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            Changes in this Release
+            - First Change
+            - Second Change
+          draft: true
+          prerelease: true
+  build_linux_macos:
+    runs-on: ${{ matrix.builder }}
+    needs: [new_release]
+    strategy:
+      matrix:
+        builder: [macos-latest, ubuntu-latest]
+    name: "build-${{ matrix.builder }}"
+    steps:
+      - name: build Tongsuo
+        run: |
+          VERSION=8.3.2
+          wget "https://github.com/Tongsuo-Project/Tongsuo/archive/refs/tags/${VERSION}.tar.gz"
+          tar zxf "${VERSION}.tar.gz"
+          pushd "Tongsuo-${VERSION}"
+          ./config --prefix=${GITHUB_WORKSPACE}/tongsuo no-shared enable-ntls --release
+          make -s -j4
+          make install_sw
+          popd
+      - uses: actions/checkout@v2
+        with:
+          path: wrk
+          fetch-depth: 0
+      - name: build wrk
+        working-directory: ./wrk
+        run: |
+          WITH_OPENSSL=${GITHUB_WORKSPACE}/tongsuo OPENSSL_STATIC_LIBS="${GITHUB_WORKSPACE}/tongsuo/lib/libssl.a ${GITHUB_WORKSPACE}/tongsuo/lib/libcrypto.a" make
+      
+      - name: upload artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ needs.new_release.outputs.upload_url }}
+          asset_path: ./wrk/wrk
+          asset_name: wrk-${{ runner.os }}
+          asset_content_type: application/octet-stream
